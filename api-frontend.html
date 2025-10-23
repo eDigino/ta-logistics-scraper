@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copart Vehicles API - Frontend</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #667eea;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .filters {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+
+        .filters h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .filter-group input, .filter-group select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .btn:hover {
+            background: #5a6fd8;
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .vehicles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .vehicle-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .vehicle-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+
+        .vehicle-name {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .vehicle-details {
+            display: grid;
+            gap: 8px;
+        }
+
+        .vehicle-detail {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+        }
+
+        .vehicle-detail .label {
+            color: #666;
+        }
+
+        .vehicle-detail .value {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .pagination button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: #f0f0f0;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid #c33;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .filter-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .vehicles-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 Copart Vehicles API</h1>
+            <p>Browse and search scraped vehicle data</p>
+        </div>
+
+        <div class="content">
+            <!-- Stats Section -->
+            <div id="stats-section">
+                <div class="stats-grid" id="stats-grid">
+                    <div class="loading">Loading statistics...</div>
+                </div>
+            </div>
+
+            <!-- Filters Section -->
+            <div class="filters">
+                <h3>🔍 Search & Filter</h3>
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <label for="search">Search (Name/Lot)</label>
+                        <input type="text" id="search" placeholder="Enter vehicle name or lot number">
+                    </div>
+                    <div class="filter-group">
+                        <label for="location">Location</label>
+                        <select id="location">
+                            <option value="">All Locations</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="sortBy">Sort By</label>
+                        <select id="sortBy">
+                            <option value="scrapedAt">Date Scraped</option>
+                            <option value="currentBidNumeric">Current Bid</option>
+                            <option value="odometerNumeric">Odometer</option>
+                            <option value="name">Vehicle Name</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="sortOrder">Order</label>
+                        <select id="sortOrder">
+                            <option value="desc">Descending</option>
+                            <option value="asc">Ascending</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <label for="minBid">Min Bid ($)</label>
+                        <input type="number" id="minBid" placeholder="0">
+                    </div>
+                    <div class="filter-group">
+                        <label for="maxBid">Max Bid ($)</label>
+                        <input type="number" id="maxBid" placeholder="100000">
+                    </div>
+                    <div class="filter-group">
+                        <label for="minOdometer">Min Odometer (mi)</label>
+                        <input type="number" id="minOdometer" placeholder="0">
+                    </div>
+                    <div class="filter-group">
+                        <label for="maxOdometer">Max Odometer (mi)</label>
+                        <input type="number" id="maxOdometer" placeholder="200000">
+                    </div>
+                </div>
+                <button class="btn" onclick="searchVehicles()">Search Vehicles</button>
+                <button class="btn" onclick="loadRecentVehicles()" style="margin-left: 10px;">Recent (24h)</button>
+            </div>
+
+            <!-- Vehicles Section -->
+            <div id="vehicles-section">
+                <div class="loading">Loading vehicles...</div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination" id="pagination" style="display: none;">
+                <button id="prevBtn" onclick="changePage(-1)">Previous</button>
+                <span id="pageInfo">Page 1 of 1</span>
+                <button id="nextBtn" onclick="changePage(1)">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/api';
+        let currentPage = 1;
+        let totalPages = 1;
+
+        // Load initial data
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStats();
+            loadLocations();
+            loadVehicles();
+        });
+
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/stats`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    const stats = result.data;
+                    document.getElementById('stats-grid').innerHTML = `
+                        <div class="stat-card">
+                            <div class="stat-number">${stats.totalVehicles || 0}</div>
+                            <div class="stat-label">Total Vehicles</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">$${Math.round(stats.avgBid || 0).toLocaleString()}</div>
+                            <div class="stat-label">Average Bid</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${Math.round(stats.avgOdometer || 0).toLocaleString()}</div>
+                            <div class="stat-label">Avg Odometer (mi)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number">${stats.vehiclesWithBuyNow || 0}</div>
+                            <div class="stat-label">Buy It Now Available</div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Load locations
+        async function loadLocations() {
+            try {
+                const response = await fetch(`${API_BASE}/locations`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    const locationSelect = document.getElementById('location');
+                    locationSelect.innerHTML = '<option value="">All Locations</option>';
+                    
+                    result.data.forEach(location => {
+                        const option = document.createElement('option');
+                        option.value = location;
+                        option.textContent = location;
+                        locationSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading locations:', error);
+            }
+        }
+
+        // Load vehicles
+        async function loadVehicles(page = 1) {
+            try {
+                const params = new URLSearchParams({
+                    page: page,
+                    limit: 12,
+                    search: document.getElementById('search').value,
+                    location: document.getElementById('location').value,
+                    minBid: document.getElementById('minBid').value,
+                    maxBid: document.getElementById('maxBid').value,
+                    minOdometer: document.getElementById('minOdometer').value,
+                    maxOdometer: document.getElementById('maxOdometer').value,
+                    sortBy: document.getElementById('sortBy').value,
+                    sortOrder: document.getElementById('sortOrder').value
+                });
+
+                const response = await fetch(`${API_BASE}/vehicles?${params}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayVehicles(result.data);
+                    updatePagination(result.pagination);
+                } else {
+                    showError('Failed to load vehicles: ' + result.error);
+                }
+            } catch (error) {
+                showError('Error loading vehicles: ' + error.message);
+            }
+        }
+
+        // Load recent vehicles
+        async function loadRecentVehicles() {
+            try {
+                const response = await fetch(`${API_BASE}/vehicles/recent`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayVehicles(result.data);
+                    document.getElementById('pagination').style.display = 'none';
+                } else {
+                    showError('Failed to load recent vehicles: ' + result.error);
+                }
+            } catch (error) {
+                showError('Error loading recent vehicles: ' + error.message);
+            }
+        }
+
+        // Display vehicles
+        function displayVehicles(vehicles) {
+            const section = document.getElementById('vehicles-section');
+            
+            if (vehicles.length === 0) {
+                section.innerHTML = '<div class="no-data">No vehicles found matching your criteria.</div>';
+                return;
+            }
+
+            const vehiclesHtml = vehicles.map(vehicle => `
+                <div class="vehicle-card">
+                    <div class="vehicle-name">${vehicle.name || 'Unknown Vehicle'}</div>
+                    <div class="vehicle-details">
+                        <div class="vehicle-detail">
+                            <span class="label">Lot Number:</span>
+                            <span class="value">${vehicle.lotNumber || 'N/A'}</span>
+                        </div>
+                        <div class="vehicle-detail">
+                            <span class="label">Current Bid:</span>
+                            <span class="value">${vehicle.currentBid || 'N/A'}</span>
+                        </div>
+                        <div class="vehicle-detail">
+                            <span class="label">Odometer:</span>
+                            <span class="value">${vehicle.odometer || 'N/A'}</span>
+                        </div>
+                        <div class="vehicle-detail">
+                            <span class="label">Location:</span>
+                            <span class="value">${vehicle.location || 'N/A'}</span>
+                        </div>
+                        <div class="vehicle-detail">
+                            <span class="label">Scraped:</span>
+                            <span class="value">${new Date(vehicle.scrapedAt).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            section.innerHTML = `<div class="vehicles-grid">${vehiclesHtml}</div>`;
+        }
+
+        // Update pagination
+        function updatePagination(pagination) {
+            currentPage = pagination.page;
+            totalPages = pagination.pages;
+            
+            const paginationDiv = document.getElementById('pagination');
+            const pageInfo = document.getElementById('pageInfo');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+            prevBtn.disabled = currentPage <= 1;
+            nextBtn.disabled = currentPage >= totalPages;
+            
+            paginationDiv.style.display = totalPages > 1 ? 'flex' : 'none';
+        }
+
+        // Change page
+        function changePage(direction) {
+            const newPage = currentPage + direction;
+            if (newPage >= 1 && newPage <= totalPages) {
+                loadVehicles(newPage);
+            }
+        }
+
+        // Search vehicles
+        function searchVehicles() {
+            currentPage = 1;
+            loadVehicles(1);
+        }
+
+        // Show error
+        function showError(message) {
+            const section = document.getElementById('vehicles-section');
+            section.innerHTML = `<div class="error">${message}</div>`;
+        }
+
+        // Enter key support for search
+        document.getElementById('search').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchVehicles();
+            }
+        });
+    </script>
+</body>
+</html>

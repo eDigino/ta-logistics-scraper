@@ -1,0 +1,30 @@
+{
+  "name": "copart-scraper",
+  "version": "1.0.0",
+  "description": "Node.js scraper for Copart.com wholesale vehicles",
+  "main": "scraper.js",
+  "type": "module",
+  "scripts": {
+    "start": "node scraper.js",
+    "dev": "node --watch scraper.js",
+    "test-db": "node test-db.js",
+    "validate-env": "node validate-env.js",
+    "api": "node api.js",
+    "test-api": "node test-api.js"
+  },
+  "keywords": [
+    "scraper",
+    "copart",
+    "web-scraping"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^5.1.0",
+    "mongodb": "^6.20.0",
+    "node-fetch": "^3.3.2",
+    "puppeteer": "^24.25.0"
+  }
+}
