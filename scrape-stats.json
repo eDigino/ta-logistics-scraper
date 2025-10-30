@@ -1,10 +1,10 @@
 {
-  "totalVehicles": 20,
-  "vehiclesWithImages": 20,
-  "vehiclesWithOdometer": 20,
+  "totalVehicles": 700,
+  "vehiclesWithImages": 700,
+  "vehiclesWithOdometer": 700,
   "vehiclesWithEstValue": 0,
-  "vehiclesWithBid": 20,
-  "vehiclesWithBuyNow": 1,
-  "vehiclesWithLocation": 20,
-  "scrapedAt": "2025-10-21T11:12:23.634Z"
+  "vehiclesWithBid": 660,
+  "vehiclesWithBuyNow": 73,
+  "vehiclesWithLocation": 700,
+  "scrapedAt": "2025-10-29T10:37:26.330Z"
 }

@@ -12,7 +12,7 @@ async function scrapeCopartVehicles() {
   console.log('🚀 Starting Copart scraper...');
   
   const browser = await puppeteer.launch({
-    headless: false, // Browser window visible
+    headless: true, // Set to true for background operation
     args: [
       '--no-sandbox', 
       '--disable-setuid-sandbox',
@@ -38,7 +38,7 @@ async function scrapeCopartVehicles() {
     
     let allVehicles = [];
     let currentPage = 1;
-    const maxPages = 1; // Only need 1 page since we'll show 100 vehicles per page
+    const maxPages = 10; // Copart has 10 pages total (1000 vehicles / 100 per page)
     const maxAttempts = 3;
     
     while (currentPage <= maxPages) {
@@ -46,6 +46,7 @@ async function scrapeCopartVehicles() {
       
       let pageVehicles = [];
       let attempt = 0;
+      let paginationInfo = null; // Store pagination info for page change detection
       
       while (pageVehicles.length === 0 && attempt < maxAttempts) {
         attempt++;
@@ -56,16 +57,39 @@ async function scrapeCopartVehicles() {
           console.log('📡 Navigating to Copart...');
         }
         
-        // Navigate to the page
-        const pageUrl = currentPage === 1 ? COPART_URL : `${COPART_URL}&page=${currentPage}`;
-        await page.goto(pageUrl, { 
-          waitUntil: 'domcontentloaded',
-          timeout: 60000 
-        });
+        // Navigate to the page (only on first page)
+        if (currentPage === 1) {
+          console.log(`🌐 Navigating to: ${COPART_URL}`);
+          await page.goto(COPART_URL, { 
+            waitUntil: 'domcontentloaded',
+            timeout: 60000 
+          });
+        }
+        // For other pages, we rely on button clicks - no URL navigation
 
         // Wait for content to load
         console.log('⏳ Waiting for content to load (10 seconds)...');
         await new Promise(resolve => setTimeout(resolve, 10000));
+        
+        // Debug: Show current URL and page info
+        const currentUrl = await page.url();
+        console.log(`🔍 Current URL: ${currentUrl}`);
+        
+        // Check if we're actually on a different page by looking for pagination info at bottom
+        paginationInfo = await page.evaluate(() => {
+          // Look for pagination info like "Showing 1 to 100 of 1000 entries"
+          const paginationText = document.querySelector('.p-paginator-current');
+          const activePage = document.querySelector('.p-paginator-page.p-highlight');
+          
+          return {
+            paginationText: paginationText ? paginationText.textContent : 'No pagination text found',
+            activePage: activePage ? activePage.textContent : 'No active page found',
+            showingInfo: document.body.innerText.match(/Showing \d+ to \d+ of \d+ entries/i) || 'No showing info found'
+          };
+        });
+        console.log(`📄 Pagination info: ${paginationInfo.paginationText}`);
+        console.log(`📄 Active page: ${paginationInfo.activePage}`);
+        console.log(`📄 Showing info: ${paginationInfo.showingInfo}`);
         
         // Check for 404 error or no results
         const pageContent = await page.content();
@@ -175,13 +199,13 @@ async function scrapeCopartVehicles() {
           }
         }
         
-        // Take screenshot (with error handling)
-        try {
-          await page.screenshot({ path: `debug-screenshot-page${currentPage}-attempt${attempt}.png`, fullPage: true });
-          console.log(`📸 Screenshot saved (page ${currentPage}, attempt ${attempt})`);
-        } catch (screenshotError) {
-          console.log(`⚠️  Screenshot failed: ${screenshotError.message}`);
-        }
+        // Take screenshot (disabled for background operation to prevent browser issues)
+        // try {
+        //   await page.screenshot({ path: `debug-screenshot-page${currentPage}-attempt${attempt}.png`, fullPage: true });
+        //   console.log(`📸 Screenshot saved (page ${currentPage}, attempt ${attempt})`);
+        // } catch (screenshotError) {
+        //   console.log(`⚠️  Screenshot failed: ${screenshotError.message}`);
+        // }
 
         console.log('🔍 Extracting vehicle data...');
         
@@ -379,6 +403,25 @@ async function scrapeCopartVehicles() {
 
         console.log(`\n✅ Found ${pageVehicles.length} vehicles on page ${currentPage}, attempt ${attempt}!\n`);
         
+        // Show first few vehicles for debugging
+        if (pageVehicles.length > 0) {
+          console.log(`   Sample vehicles from page ${currentPage}:`);
+          pageVehicles.slice(0, 3).forEach((vehicle, index) => {
+            console.log(`   ${index + 1}. ${vehicle.name} - Lot: ${vehicle.lotNumber}`);
+          });
+          
+          // Check if we're getting the same vehicles as previous pages
+          if (currentPage > 1) {
+            const firstVehicle = pageVehicles[0];
+            const isSameAsFirst = allVehicles.some(v => v.lotNumber === firstVehicle.lotNumber);
+            if (isSameAsFirst) {
+              console.log(`   ⚠️  First vehicle on page ${currentPage} was already seen before!`);
+            } else {
+              console.log(`   ✅ First vehicle on page ${currentPage} is new!`);
+            }
+          }
+        }
+        
         // If no vehicles found and we have more attempts, wait before retrying
         if (pageVehicles.length === 0 && attempt < maxAttempts) {
           console.log(`⚠️  No vehicles found. Waiting 5 seconds before retry...`);
@@ -386,9 +429,38 @@ async function scrapeCopartVehicles() {
         }
       } // End of attempt loop
       
-      // Add page vehicles to total
-      allVehicles = allVehicles.concat(pageVehicles);
-      console.log(`📊 Total vehicles so far: ${allVehicles.length}`);
+      // Check for duplicates by lotNumber before adding
+      const existingLotNumbers = allVehicles.map(v => v.lotNumber);
+      const newVehicles = pageVehicles.filter(vehicle => !existingLotNumbers.includes(vehicle.lotNumber));
+      const duplicates = pageVehicles.length - newVehicles.length;
+      
+      if (duplicates > 0) {
+        console.log(`⚠️  Found ${duplicates} duplicate vehicles on page ${currentPage} (by lotNumber)`);
+        console.log(`   New vehicles: ${newVehicles.length}, Duplicates: ${duplicates}`);
+        
+        // Don't stop on duplicates - let's see all pages to understand the issue
+        // if (duplicates > pageVehicles.length * 0.8) { // 80% duplicates
+        //   console.log(`🛑 Too many duplicates (${Math.round(duplicates/pageVehicles.length*100)}%). Stopping pagination.`);
+        //   break;
+        // }
+      }
+      
+      // Add only new vehicles to total
+      allVehicles = allVehicles.concat(newVehicles);
+      console.log(`📊 Total vehicles so far: ${allVehicles.length} (${newVehicles.length} new from page ${currentPage})`);
+      
+      // Save vehicles to database after each page (only if we have new vehicles)
+      if (newVehicles.length > 0) {
+        try {
+          console.log(`💾 Saving ${newVehicles.length} new vehicles from page ${currentPage} to database...`);
+          await saveVehicles(newVehicles);
+          console.log(`✅ Successfully saved ${newVehicles.length} vehicles from page ${currentPage}`);
+        } catch (dbError) {
+          console.error(`⚠️  Failed to save vehicles from page ${currentPage}:`, dbError.message);
+        }
+      } else {
+        console.log(`ℹ️  No new vehicles to save from page ${currentPage}`);
+      }
       
       // If no vehicles found after all attempts, we've reached the end
       if (pageVehicles.length === 0) {
@@ -426,6 +498,65 @@ async function scrapeCopartVehicles() {
               // Wait for navigation and content to load
               await new Promise(resolve => setTimeout(resolve, 5000));
               
+              // Check if page actually changed by looking at pagination info
+              const newPaginationInfo = await page.evaluate(() => {
+                const paginationText = document.querySelector('.p-paginator-current');
+                const activePage = document.querySelector('.p-paginator-page.p-highlight');
+                return {
+                  paginationText: paginationText ? paginationText.textContent : 'No pagination text found',
+                  activePage: activePage ? activePage.textContent : 'No active page found'
+                };
+              });
+              
+              console.log(`🔍 After click - Pagination info: ${newPaginationInfo.paginationText}`);
+              console.log(`🔍 After click - Active page: ${newPaginationInfo.activePage}`);
+              
+               // Check if we're actually on a different page
+               if (newPaginationInfo.activePage === paginationInfo.activePage) {
+                 console.log(`⚠️  Page didn't change after clicking! Still on page ${paginationInfo.activePage}`);
+                 
+                 // Try clicking again with a longer wait
+                 console.log(`🔄 Retrying page ${currentPage} click...`);
+                 await new Promise(resolve => setTimeout(resolve, 2000));
+                 
+                 // Try clicking the page button again
+                 const retryPageButton = await page.$(pageNumberSelector);
+                 if (retryPageButton) {
+                   await retryPageButton.click();
+                   console.log(`🔄 Retry clicked page ${currentPage} button`);
+                   
+                   // Wait longer for the page to load
+                   await new Promise(resolve => setTimeout(resolve, 5000));
+                   
+                   // Check if page changed after retry
+                   const retryPaginationInfo = await page.evaluate(() => {
+                     const paginationText = document.querySelector('.p-paginator-current');
+                     const activePage = document.querySelector('.p-paginator-page.p-highlight');
+                     return {
+                       paginationText: paginationText ? paginationText.textContent : 'No pagination text found',
+                       activePage: activePage ? activePage.textContent : 'No active page found'
+                     };
+                   });
+                   
+                   console.log(`🔍 After retry - Pagination info: ${retryPaginationInfo.paginationText}`);
+                   console.log(`🔍 After retry - Active page: ${retryPaginationInfo.activePage}`);
+                   
+                   if (retryPaginationInfo.activePage === paginationInfo.activePage) {
+                     console.log(`❌ Page still didn't change after retry. Stopping pagination.`);
+                     currentPage = maxPages + 1; // Force exit from while loop
+                     break;
+                   } else {
+                     console.log(`✅ Page changed after retry from ${paginationInfo.activePage} to ${retryPaginationInfo.activePage}`);
+                   }
+                 } else {
+                   console.log(`❌ Could not find page button for retry. Stopping pagination.`);
+                   currentPage = maxPages + 1; // Force exit from while loop
+                   break;
+                 }
+               } else {
+                 console.log(`✅ Page successfully changed from ${paginationInfo.activePage} to ${newPaginationInfo.activePage}`);
+               }
+              
               // Scroll to ensure content is loaded
               await page.evaluate(() => {
                 window.scrollTo(0, 500);
@@ -449,7 +580,67 @@ async function scrapeCopartVehicles() {
                 console.log('✅ Found "Next Page" button');
                 await nextButton.click();
                 console.log('✅ Clicked "Next Page" button');
+                
+                // Wait for navigation and content to load
                 await new Promise(resolve => setTimeout(resolve, 5000));
+                
+                // Check if page actually changed by looking at pagination info
+                const newPaginationInfo = await page.evaluate(() => {
+                  const paginationText = document.querySelector('.p-paginator-current');
+                  const activePage = document.querySelector('.p-paginator-page.p-highlight');
+                  return {
+                    paginationText: paginationText ? paginationText.textContent : 'No pagination text found',
+                    activePage: activePage ? activePage.textContent : 'No active page found'
+                  };
+                });
+                
+                console.log(`🔍 After Next click - Pagination info: ${newPaginationInfo.paginationText}`);
+                console.log(`🔍 After Next click - Active page: ${newPaginationInfo.activePage}`);
+                
+                 // Check if we're actually on a different page
+                 if (newPaginationInfo.activePage === paginationInfo.activePage) {
+                   console.log(`⚠️  Page didn't change after clicking Next! Still on page ${paginationInfo.activePage}`);
+                   
+                   // Try clicking Next button again
+                   console.log(`🔄 Retrying Next Page click...`);
+                   await new Promise(resolve => setTimeout(resolve, 2000));
+                   
+                   const retryNextButton = await page.$(nextButtonSelector);
+                   if (retryNextButton) {
+                     await retryNextButton.click();
+                     console.log(`🔄 Retry clicked Next Page button`);
+                     
+                     // Wait longer for the page to load
+                     await new Promise(resolve => setTimeout(resolve, 5000));
+                     
+                     // Check if page changed after retry
+                     const retryPaginationInfo = await page.evaluate(() => {
+                       const paginationText = document.querySelector('.p-paginator-current');
+                       const activePage = document.querySelector('.p-paginator-page.p-highlight');
+                       return {
+                         paginationText: paginationText ? paginationText.textContent : 'No pagination text found',
+                         activePage: activePage ? activePage.textContent : 'No active page found'
+                       };
+                     });
+                     
+                     console.log(`🔍 After Next retry - Pagination info: ${retryPaginationInfo.paginationText}`);
+                     console.log(`🔍 After Next retry - Active page: ${retryPaginationInfo.activePage}`);
+                     
+                     if (retryPaginationInfo.activePage === paginationInfo.activePage) {
+                       console.log(`❌ Page still didn't change after Next retry. Stopping pagination.`);
+                       currentPage = maxPages + 1; // Force exit from while loop
+                       break;
+                     } else {
+                       console.log(`✅ Page changed after Next retry from ${paginationInfo.activePage} to ${retryPaginationInfo.activePage}`);
+                     }
+                   } else {
+                     console.log(`❌ Could not find Next button for retry. Stopping pagination.`);
+                     currentPage = maxPages + 1; // Force exit from while loop
+                     break;
+                   }
+                 } else {
+                   console.log(`✅ Page successfully changed from ${paginationInfo.activePage} to ${newPaginationInfo.activePage}`);
+                 }
               } else {
                 console.log('⚠️  "Next Page" button is disabled');
               }
@@ -496,13 +687,10 @@ async function scrapeCopartVehicles() {
       await fs.writeFile('vehicles.json', JSON.stringify(vehicleList, null, 2));
       console.log('\n💾 Full data saved to vehicles.json');
       
-      // Save to MongoDB database
+      // Get final database statistics (vehicles were saved after each page)
       try {
-        await saveVehicles(vehicleList);
-        
-        // Get database statistics
         const dbStats = await getVehicleStats();
-        console.log('\n📊 Database Statistics:');
+        console.log('\n📊 Final Database Statistics:');
         console.log(`   Total vehicles in database: ${dbStats.totalVehicles || 0}`);
         console.log(`   Average odometer: ${Math.round(dbStats.avgOdometer || 0).toLocaleString()} mi`);
         console.log(`   Average bid: $${Math.round(dbStats.avgBid || 0).toLocaleString()}`);
@@ -512,7 +700,7 @@ async function scrapeCopartVehicles() {
           console.log(`   Latest scrape: ${new Date(dbStats.latestScrape).toLocaleString()}`);
         }
       } catch (dbError) {
-        console.error('⚠️  Database save failed, but JSON file was saved:', dbError.message);
+        console.error('⚠️  Failed to get database statistics:', dbError.message);
       }
       
       // Create local statistics
@@ -539,9 +727,9 @@ async function scrapeCopartVehicles() {
       console.log(`   With location: ${stats.vehiclesWithLocation}`);
     }
 
-    // Keep browser open for inspection
-    console.log('\n⏳ Keeping browser open for 10 seconds for inspection...');
-    await new Promise(resolve => setTimeout(resolve, 10000));
+    // Keep browser open for inspection (disabled for background operation)
+    // console.log('\n⏳ Keeping browser open for 10 seconds for inspection...');
+    // await new Promise(resolve => setTimeout(resolve, 10000));
 
     return vehicleList || [];
 
